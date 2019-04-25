@@ -1,5 +1,6 @@
 #include "annotations.h"
 #include "sys_util.h"
+#include <time.h>
 
 /**
  * From the GDB manual.
@@ -295,6 +296,38 @@ static void handle_error(struct annotations_parser *parser)
     parser->error_message.clear();
 }
 
+static time_t raw_time_stop = 0;
+static void handle_stop(struct annotations_parser *parser)
+{
+    time_t t = time(NULL);
+    if (t - raw_time_stop > 1)
+    {
+        parser->callbacks.command_stop_callback(parser->callbacks.context);
+        raw_time_stop = t;
+    }
+}
+
+static time_t raw_time_exit = 0;
+static void handle_exit(struct annotations_parser *parser)
+{
+    time_t t = time(NULL);
+    if (t - raw_time_exit > 1)
+    {
+        parser->callbacks.command_exit_callback(parser->callbacks.context);
+        raw_time_exit = t;
+    }
+}
+
+static void handle_starting(struct annotations_parser *parser)
+{
+    parser->callbacks.command_starting_callback(parser->callbacks.context);
+}
+
+static void handle_thread_changed(struct annotations_parser *parser)
+{
+    parser->callbacks.source_location_changed_callback(parser->callbacks.context);
+}
+
 static void handle_quit(struct annotations_parser *parser)
 {
     send_available_console_output(parser); 
@@ -405,6 +438,10 @@ static struct annotation {
      * the error-begin annotation and this one.
      */
     "error", handle_error}, {
+    "stopped", handle_stop}, {
+    "starting", handle_starting}, {
+    "thread-exited", handle_exit}, {
+    "thread-changed", handle_thread_changed}, {
 
      /**
       * This occurs when gdb responds to an interupt (ctrl-c).
@@ -423,7 +460,8 @@ static void parse_annotation(struct annotations_parser *parser)
     int i;
 
     std::string annotation_only = parser->annotation_text.substr(0, 
-        parser->annotation_text.find(' '));
+            std::min(parser->annotation_text.find(','),
+                    parser->annotation_text.find(' ')));
 
     for (i = 0; annotations[i].data != NULL; ++i) {
         if (annotation_only == annotations[i].data) {

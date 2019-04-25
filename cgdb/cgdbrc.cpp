@@ -79,6 +79,8 @@ static int command_do_help(int param);
 static int command_do_logo(int param);
 static int command_do_quit(int param);
 static int command_do_shell(int param);
+static int command_do_switch(int param);
+static int command_do_switchthread(int param);
 static int command_source_reload(int param);
 
 static int command_parse_syntax(int param);
@@ -117,6 +119,8 @@ COMMANDS commands[] = {
     /* syntax       */ {"syntax", (action_t)command_parse_syntax, 0},
     /* unmap        */ {"unmap", (action_t)command_parse_unmap, 0},
     /* unmap        */ {"unm", (action_t)command_parse_unmap, 0},
+    /* switch       */ {"switch", (action_t)command_do_switch, 0},
+    /* switchb      */ {"switchbreak", (action_t)command_do_switchthread, 0},
     /* continue     */ {"continue", (action_t)command_do_tgdbcommand, TGDB_CONTINUE},
     /* continue     */ {"c", (action_t)command_do_tgdbcommand, TGDB_CONTINUE},
     /* down         */ {"down", (action_t)command_do_tgdbcommand, TGDB_DOWN},
@@ -709,7 +713,13 @@ int command_do_bang(int param)
 
 int command_do_tgdbcommand(enum tgdb_command_type param)
 {
-    tgdb_request_run_debugger_command(tgdb, param);
+    tgdb_request_run_debugger_command(tgdb, param, NULL);
+    return 0;
+}
+
+int command_do_tgdbcommand(enum tgdb_command_type param, char* arg)
+{
+    tgdb_request_run_debugger_command(tgdb, param, arg);
     return 0;
 }
 
@@ -754,6 +764,53 @@ int command_do_quit(int param)
 int command_do_shell(int param)
 {
     return run_shell_command(NULL);
+}
+
+int command_do_switch(int param)
+{
+    struct sviewer *sview = if_get_sview();
+
+    if (!sview)
+        return -1;
+
+    /* If there is no current source file, then there is nothing to reload. */
+    if (!sview->cur || sview->cur->path[0] == '*')
+        return 0;
+
+    // int sel_line;               /* Current line selected in viewer */
+    // int sel_col;                /* Current column selected in viewer */
+    // int exe_line;               /* Current line executing, or -1 if not set */
+    // int sel_rline;              /* Current line used by regex */
+
+    char buffer[32767];
+    snprintf(buffer, sizeof(buffer), "e %s:%d", sview->cur->path, sview->cur->sel_line + 1);
+    return system(buffer);
+}
+
+int command_do_switchthread(int param)
+{
+    struct sviewer *sview = if_get_sview();
+    int line;
+    uint64_t addr = 0;
+    char *path = NULL;
+    if (!sview || !sview->cur || !sview->cur->path)
+        return -1;
+    line = sview->cur->sel_line;
+    if (sview->cur->path[0] == '*')
+    {
+        addr = sview->cur->file_buf.addrs[line];
+        if (!addr)
+            return -1;
+    }
+    else
+    {
+        /* Get filename (strip path off -- GDB is dumb) */
+        path = strrchr(sview->cur->path, '/') + 1;
+        if (path == (char *)NULL + 1)
+            path = sview->cur->path;
+    }
+    char* str = sys_aprintf("threadswitch %s:%d", path, line + 1);
+    return command_do_tgdbcommand(TGDB_SWITCHTHREAD, str);
 }
 
 int command_source_reload(int param)

@@ -29,6 +29,7 @@
         TGDB_CONTINUE = 0,
     /** This will instruct TGDB to tell the debugger to finish.  */
         TGDB_FINISH,
+        TGDB_SWITCHTHREAD,
     /** 
      * This will instruct TGDB to tell the debugger to go to the next 
      * source level instruction.
@@ -242,6 +243,7 @@
             struct {
     /** This is the command that libtgdb should run through the debugger */
                 enum tgdb_command_type c;
+                char *arg;
             } debugger_command;
 
             struct {

@@ -25,6 +25,7 @@
 #include "io.h"
 #include "tgdb_types.h"
 #include "gdbwire.h"
+#include "tgdb.h"
 
 /**
  * This structure aids in parsing the gdb command output, in annotations or mi.
@@ -373,6 +374,21 @@ static void gdbwire_stream_record_callback(void *context,
 static void gdbwire_async_record_callback(void *context,
         struct gdbwire_mi_async_record *async_record)
 {
+    struct commands *c = (struct commands*)context;
+    FILE* f = fopen("/tmp/fk", "a+");
+    fprintf(f, "kind = %d, async_class = %d\n", async_record->kind, async_record->async_class);
+    if (async_record->kind == GDBWIRE_MI_NOTIFY && async_record->async_class == GDBWIRE_MI_ASYNC_THREAD_EXITED)
+    {
+        fprintf(f, "ttttt\n");
+        tgdb_request_run_console_command(c->tgdb, "thread 1");
+    }
+    fclose(f);
+    // switch (c->current_request_type) {
+    //     case TGDB_REQUEST_CONSOLE_COMMAND:
+    //         break;
+    //     default:
+    //         break;
+    // }
 }
 
 static void gdbwire_result_record_callback(void *context,

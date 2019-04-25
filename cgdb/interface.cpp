@@ -83,6 +83,7 @@
 #include "sources.h"
 #include "tgdb.h"
 #include "filedlg.h"
+#include "fork_util.h"
 #include "cgdbrc.h"
 #include "highlight.h"
 #include "highlight_groups.h"
@@ -128,7 +129,7 @@ static struct scroller *gdb_scroller = NULL;
 static struct sviewer *src_viewer = NULL;  /* The source viewer window */
 static SWINDOW *status_win = NULL;   /* The status line */
 static SWINDOW *vseparator_win = NULL;   /* Separator gets own window */
-static enum Focus focus = GDB;  /* Which pane is currently focused */
+static enum Focus focus = CGDB;  /* Which pane is currently focused */
 static struct winsize screen_size;  /* Screen size */
 
 struct filedlg *fd;             /* The file dialog structure */
@@ -879,12 +880,14 @@ static int gdb_input(int key, int *last_key)
             case '\'':
                 /* Mark keys - ignore them */
                 break;
+            case 'u':
             case CGDB_KEY_CTRL_U:
                 scr_up(gdb_scroller, get_gdb_height() / 2);
                 break;
             case CGDB_KEY_PPAGE:
                 scr_up(gdb_scroller, get_gdb_height() - 1);
                 break;
+            case 'd':
             case CGDB_KEY_CTRL_D:
                 scr_down(gdb_scroller, get_gdb_height() / 2);
                 break;
@@ -919,6 +922,7 @@ static int gdb_input(int key, int *last_key)
             case 'i':
             case '\r':
             case '\n':
+            case CGDB_KEY_ESC:
             case CGDB_KEY_CTRL_M:
                 scr_end(gdb_scroller);
                 gdb_scroller->in_scroll_mode = 0;
@@ -1171,12 +1175,13 @@ static void source_input(struct sviewer *sview, int key)
         }
         case CGDB_KEY_LEFT:
         case 'h':
-            source_hscroll(sview, -1);
+            source_hscroll(sview, -10);
             break;
         case CGDB_KEY_RIGHT:
         case 'l':
-            source_hscroll(sview, 1);
+            source_hscroll(sview, 10);
             break;
+        case 'u':  /* VI-style 1/2 page up */
         case CGDB_KEY_CTRL_U:  /* VI-style 1/2 page up */
             source_vscroll(sview, -(get_src_height() / 2));
             break;
@@ -1184,6 +1189,7 @@ static void source_input(struct sviewer *sview, int key)
         case CGDB_KEY_CTRL_B:  /* VI-style page up */
             source_vscroll(sview, -(get_src_height() - 1));
             break;
+        case 'd':
         case CGDB_KEY_CTRL_D:  /* VI-style 1/2 page down */
             source_vscroll(sview, (get_src_height() / 2));
             break;
@@ -1215,16 +1221,6 @@ static void source_input(struct sviewer *sview, int key)
         case '_':
             decrease_win_height(1);
             break;
-        case 'o':
-            /* Causes file dialog to be opened */
-        {
-            extern int kui_input_acceptable;
-
-            kui_input_acceptable = 0;
-
-            tgdb_request_inferiors_source_files(tgdb);
-        }
-            break;
         case ' ':
         {
             enum tgdb_breakpoint_action t = TGDB_BREAKPOINT_ADD;
@@ -1232,11 +1228,12 @@ static void source_input(struct sviewer *sview, int key)
             toggle_breakpoint(sview, t);
         }
             break;
-        case 't':
+        case 'o':
         {
             enum tgdb_breakpoint_action t = TGDB_TBREAKPOINT_ADD;
 
             toggle_breakpoint(sview, t);
+            tgdb_request_run_debugger_command(tgdb, TGDB_CONTINUE);
         }
             break;
         default:
@@ -1280,6 +1277,11 @@ static int set_up_signal(void)
     }
 
     if (sigaction(SIGQUIT, &action, NULL) < 0) {
+        clog_error(CLOG_CGDB, "sigaction failed ");
+        return -1;
+    }
+
+    if (sigaction(SIGHUP, &action, NULL) < 0) {
         clog_error(CLOG_CGDB, "sigaction failed ");
         return -1;
     }
@@ -1463,13 +1465,15 @@ static int cgdb_input(int key, int *last_key)
     return 0;
 }
 
+extern pty_pair_ptr pty_pair;
+
 int internal_if_input(int key, int *last_key)
 {
     /* Normally, CGDB_KEY_ESC, but can be configured by the user */
     int cgdb_mode_key = cgdbrc_get_int(CGDBRC_CGDB_MODE_KEY);
 
     /* The cgdb mode key, puts the debugger into command mode */
-    if (focus != CGDB && key == cgdb_mode_key) {
+    if (focus != CGDB && key == cgdb_mode_key && !gdb_scroller->in_scroll_mode) {
         enum Focus new_focus = CGDB;
 
         /* Depending on which cgdb was in, it can free some memory here that
@@ -1499,8 +1503,26 @@ int internal_if_input(int key, int *last_key)
         return 0;
     }
     /* If you are already in cgdb mode, the cgdb mode key does nothing */
-    else if (key == cgdb_mode_key)
+    else if (key == cgdb_mode_key && !gdb_scroller->in_scroll_mode)
         return 0;
+    else if (focus == GDB && sbc_kind == SBC_NORMAL && key == CGDB_KEY_CTRL_M)
+    {
+        const char eol = 5;
+        const char ret = '\n';
+        int size;
+        int masterfd;
+        masterfd = pty_pair_get_masterfd(pty_pair);
+        if (masterfd == -1)
+            clog_error(CLOG_CGDB, "send_key error");
+        size = write(masterfd, &eol, sizeof (char));
+        if (size != 1)
+            clog_error(CLOG_CGDB, "send_key error");
+        size = write(masterfd, &ret, sizeof (char));
+        if (size != 1)
+            clog_error(CLOG_CGDB, "send_key error");
+        if_set_focus(CGDB);
+        return 0;
+    }
 
     /* Check for global keystrokes */
     switch (focus) {

@@ -347,7 +347,7 @@
    * This is the command that libtgdb should run through the debugger.
    */
     void tgdb_request_run_debugger_command(struct tgdb *tgdb,
-            enum tgdb_command_type c);
+                                           enum tgdb_command_type c, char* arg = NULL);
 
   /**
    * Modify's a breakpoint.

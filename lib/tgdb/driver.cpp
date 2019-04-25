@@ -52,6 +52,7 @@
 
 #define MAXLINE 4096
 
+bool rr = false;
 struct tgdb *tgdb;
 
 /** Master/Slave PTY used to keep readline off of stdin/stdout.  */

@@ -212,6 +212,32 @@ static void tgdb_console_output(void *context, const std::string &msg)
 
 }
 
+extern bool rr;
+static void tgdb_stop(void *context)
+{
+    struct tgdb *tgdb = (struct tgdb*)context;
+    if (!rr)
+        tgdb_request_run_console_command(tgdb, "bird");
+}
+
+static void tgdb_exit(void *context)
+{
+    struct tgdb *tgdb = (struct tgdb*)context;
+    if (!rr)
+        tgdb_request_run_console_command(tgdb, "amos");
+}
+
+static bool starting = false;
+static void tgdb_starting(void *context)
+{
+    struct tgdb *tgdb = (struct tgdb*)context;
+    if (!starting && !rr)
+    {
+        tgdb_request_run_console_command(tgdb, "interrupt");
+        starting = true;
+    }
+}
+
 static void tgdb_command_error(void *context, const std::string &msg)
 {
     struct tgdb *tgdb = (struct tgdb*)context;
@@ -324,8 +350,11 @@ struct tgdb *tgdb_initialize(const char *debugger,
         tgdb_source_location_changed,
         tgdb_prompt_changed,
         tgdb_console_output,
+        tgdb_stop,
+        tgdb_exit,
+        tgdb_starting,
         tgdb_command_error,
-        tgdb_console_at_prompt  
+        tgdb_console_at_prompt
     };
 
     tgdb->debugger_pid = invoke_debugger(debugger, argc, argv,
@@ -339,7 +368,7 @@ struct tgdb *tgdb_initialize(const char *debugger,
 
     tgdb->parser = annotations_parser_initialize(annotations_callbacks);
 
-    tgdb_open_new_tty(tgdb, &tgdb->inferior_stdin, &tgdb->inferior_stdout);
+    // tgdb_open_new_tty(tgdb, &tgdb->inferior_stdin, &tgdb->inferior_stdout);
 
     /* Need to get source information before breakpoint information otherwise
      * the TGDB_UPDATE_BREAKPOINTS event will be ignored in process_commands()
@@ -394,10 +423,11 @@ void tgdb_close_logfiles()
 
 /* }}}*/
 
-static const char *tgdb_get_client_command(struct tgdb *tgdb,
-        enum tgdb_command_type c)
+static const char* tgdb_get_client_command(struct tgdb* tgdb, enum tgdb_command_type c, char* arg)
 {
     switch (c) {
+        case TGDB_SWITCHTHREAD:
+            return arg;  // setted in cgdbrc
         case TGDB_CONTINUE:
             return "continue";
         case TGDB_FINISH:
@@ -419,8 +449,7 @@ static const char *tgdb_get_client_command(struct tgdb *tgdb,
         case TGDB_DOWN:
             return "down";
     }
-
-    return NULL;
+    __builtin_unreachable();
 }
 
 static char *tgdb_client_modify_breakpoint_call(struct tgdb *tgdb,
@@ -640,6 +669,8 @@ static void tgdb_handle_control_c(struct tgdb *tgdb)
 
         tgdb->control_c = 0;
 
+        io_writen(tgdb->debugger_stdin, "interrupt\n", 10);
+
         tgdb->make_console_ready_callback = true;
     }
 }
@@ -852,7 +883,7 @@ void tgdb_request_current_location(struct tgdb * tgdb)
 }
 
 void
-tgdb_request_run_debugger_command(struct tgdb * tgdb, enum tgdb_command_type c)
+tgdb_request_run_debugger_command(struct tgdb * tgdb, enum tgdb_command_type c, char* arg)
 {
     tgdb_request_ptr request_ptr;
 
@@ -860,6 +891,7 @@ tgdb_request_run_debugger_command(struct tgdb * tgdb, enum tgdb_command_type c)
 
     request_ptr->header = TGDB_REQUEST_DEBUGGER_COMMAND;
     request_ptr->choice.debugger_command.c = c;
+    request_ptr->choice.debugger_command.arg = arg;
 
     tgdb_run_or_queue_request(tgdb, request_ptr, false);
 }
@@ -966,8 +998,17 @@ int tgdb_get_gdb_command(struct tgdb *tgdb, tgdb_request_ptr request,
         case TGDB_REQUEST_DEBUGGER_COMMAND:
             // tgdb_get_client_command always returns a string
             // with static storage duration
-            command = tgdb_get_client_command(tgdb,
-                    request->choice.debugger_command.c);
+        {
+            // only non-const when not NULL
+            str = (char *) tgdb_get_client_command(tgdb,
+                                                   request->choice.debugger_command.c,
+                                                   request->choice.debugger_command.arg);
+            command = str;
+            if (request->choice.debugger_command.c == TGDB_SWITCHTHREAD) {
+                free(str);
+                str = NULL;
+            }
+        }
             break;
         case TGDB_REQUEST_MODIFY_BREAKPOINT:
             str = tgdb_client_modify_breakpoint_call(tgdb,

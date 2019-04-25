@@ -90,6 +90,8 @@
 
 #define GDB_MAXBUF 4096         /* GDB input buffer size */
 
+bool rr = false;
+
 const char *readline_history_filename = "readline_history.txt";
 
 /* --------------- */
@@ -107,7 +109,7 @@ char *readline_history_path;    /* After readline init is called, this will
 static int gdb_fd = -1;         /* File descriptor for GDB communication */
 
 /** Master/Slave PTY used to keep readline off of stdin/stdout. */
-static pty_pair_ptr pty_pair;
+pty_pair_ptr pty_pair;
 
 static char *debugger_path = NULL;  /* Path to debugger to use */
 
@@ -723,7 +725,7 @@ static char *version_info(void)
 static void parse_long_options(int *argc, char ***argv)
 {
     int c, option_index = 0, n = 1;
-    const char *args = "wd:hv";
+    const char *args = "wd:hvr";
 
 #ifdef HAVE_GETOPT_H
     static struct option long_options[] = {
@@ -779,6 +781,10 @@ static void parse_long_options(int *argc, char ***argv)
             case 'h':
                 usage();
                 exit(0);
+            case 'r':
+                rr = true;
+                n++;
+                break;
             default:
                 break;
         }
@@ -1341,6 +1347,9 @@ static int cgdb_handle_signal_in_main_loop(int fd)
 
     tgdb_signal_notification(tgdb, signo);
 
+    if (signo == SIGHUP) {
+        return -1;
+    }
     return 0;
 }
 
@@ -1380,10 +1389,10 @@ static int main_loop(void)
          * This varies the value of tty_fd, and forces us to compute the max
          * each time in the loop.
          */
-        int tty_fd = tgdb_get_inferior_fd(tgdb);
+        // int tty_fd = tgdb_get_inferior_fd(tgdb);
 
         max = (gdb_fd > STDIN_FILENO) ? gdb_fd : STDIN_FILENO;
-        max = (max > tty_fd) ? max : tty_fd;
+        // max = (max > tty_fd) ? max : tty_fd;
         max = (max > resize_pipe[0]) ? max : resize_pipe[0];
         max = (max > signal_pipe[0]) ? max : signal_pipe[0];
         max = (max > slavefd) ? max : slavefd;
@@ -1393,7 +1402,7 @@ static int main_loop(void)
         FD_ZERO(&rset);
         FD_SET(STDIN_FILENO, &rset);
         FD_SET(gdb_fd, &rset);
-        FD_SET(tty_fd, &rset);
+        // FD_SET(tty_fd, &rset);
         FD_SET(resize_pipe[0], &rset);
         FD_SET(signal_pipe[0], &rset);
 
@@ -1448,33 +1457,6 @@ static int main_loop(void)
                 continue;
             else if (val == -1)
                 return -1;
-        }
-
-        /**
-         * Handle the debugged programs standard output.
-         * (Otherwise known as the inferior)
-         * child's ouptut -> stdout
-         * 
-         * The continue is important. It allows all of the child
-         * output to get written to stdout before tgdb's next command.
-         * This is because sometimes they are both ready.
-         *
-         * In the case that the tty_fd has been closed, do not continue
-         * or an infinite loop will occur (as the select loop is always
-         * activated on EOF). Instead fall through and let the remaining
-         * file descriptors get handled.
-         */
-        if (FD_ISSET(tty_fd, &rset)) {
-            ssize_t result = child_input();
-            if (result == -1) {
-                return -1;
-            } else if (result == 0) {
-                if (tgdb_tty_new(tgdb) == -1) {
-                    return -1;
-                }
-            } else {
-                continue;
-            }
         }
 
         /* gdb's output -> stdout */

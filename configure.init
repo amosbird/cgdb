@@ -175,11 +175,7 @@ dnl If the user want ncurses, Try to find it and add it to the linking library.
 if test "$use_ncurses_library" = "yes"; then
         AC_CHECK_LIB(ncurses, initscr,
             [AC_DEFINE(HAVE_NCURSES, ["yes"], ncurses library)])
-        AC_CHECK_LIB(ncursesw, initscr,
-            [AC_DEFINE(HAVE_NCURSES, ["yes"], ncursesw library)])
-        if test "$ac_cv_lib_ncursesw_initscr" = "yes"; then
-	    curses_lib_name="ncursesw"
-        elif test "$ac_cv_lib_ncurses_initscr" = "yes"; then
+        if test "$ac_cv_lib_ncurses_initscr" = "yes"; then
 	    curses_lib_name="ncurses"
         else
             AC_MSG_ERROR([cgdb needs ncurses/curses to build. ncurses is strongly recommended.

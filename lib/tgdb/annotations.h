@@ -69,6 +69,12 @@ struct annotations_parser_callbacks {
      */
     void (*console_output_callback)(void *context, const std::string &str);
 
+    void (*command_stop_callback)(void *context);
+
+    void (*command_exit_callback)(void *context);
+
+    void (*command_starting_callback)(void *context);
+
     /**
      * GDB reported an error for the command being executed.
      *
