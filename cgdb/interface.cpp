@@ -1279,6 +1279,11 @@ static int set_up_signal(void)
         return -1;
     }
 
+    if (sigaction(SIGHUP, &action, NULL) < 0) {
+        clog_error(CLOG_CGDB, "sigaction failed ");
+        return -1;
+    }
+
     return 0;
 }
 

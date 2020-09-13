@@ -1388,10 +1388,10 @@ static int main_loop(void)
          * This varies the value of tty_fd, and forces us to compute the max
          * each time in the loop.
          */
-        int tty_fd = tgdb_get_inferior_fd(tgdb);
+        // int tty_fd = tgdb_get_inferior_fd(tgdb);
 
         max = (gdb_fd > STDIN_FILENO) ? gdb_fd : STDIN_FILENO;
-        max = (max > tty_fd) ? max : tty_fd;
+        // max = (max > tty_fd) ? max : tty_fd;
         max = (max > resize_pipe[0]) ? max : resize_pipe[0];
         max = (max > signal_pipe[0]) ? max : signal_pipe[0];
         max = (max > slavefd) ? max : slavefd;
@@ -1401,7 +1401,7 @@ static int main_loop(void)
         FD_ZERO(&rset);
         FD_SET(STDIN_FILENO, &rset);
         FD_SET(gdb_fd, &rset);
-        FD_SET(tty_fd, &rset);
+        // FD_SET(tty_fd, &rset);
         FD_SET(resize_pipe[0], &rset);
         FD_SET(signal_pipe[0], &rset);
 
@@ -1472,18 +1472,18 @@ static int main_loop(void)
          * activated on EOF). Instead fall through and let the remaining
          * file descriptors get handled.
          */
-        if (FD_ISSET(tty_fd, &rset)) {
-            ssize_t result = child_input();
-            if (result == -1) {
-                return -1;
-            } else if (result == 0) {
-                if (tgdb_tty_new(tgdb) == -1) {
-                    return -1;
-                }
-            } else {
-                continue;
-            }
-        }
+        // if (FD_ISSET(tty_fd, &rset)) {
+        //     ssize_t result = child_input();
+        //     if (result == -1) {
+        //         return -1;
+        //     } else if (result == 0) {
+        //         if (tgdb_tty_new(tgdb) == -1) {
+        //             return -1;
+        //         }
+        //     } else {
+        //         continue;
+        //     }
+        // }
 
         /* gdb's output -> stdout */
         if (FD_ISSET(gdb_fd, &rset)) {

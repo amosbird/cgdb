@@ -339,7 +339,7 @@ struct tgdb *tgdb_initialize(const char *debugger,
 
     tgdb->parser = annotations_parser_initialize(annotations_callbacks);
 
-    tgdb_open_new_tty(tgdb, &tgdb->inferior_stdin, &tgdb->inferior_stdout);
+    // tgdb_open_new_tty(tgdb, &tgdb->inferior_stdin, &tgdb->inferior_stdout);
 
     /* Need to get source information before breakpoint information otherwise
      * the TGDB_UPDATE_BREAKPOINTS event will be ignored in process_commands()
