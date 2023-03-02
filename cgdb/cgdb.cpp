@@ -782,6 +782,9 @@ static int cgdb_handle_signal_in_main_loop(int fd)
 
     tgdb_signal_notification(tgdb, signo);
 
+    if (signo == SIGHUP) {
+        return -1;
+    }
     return 0;
 }
 

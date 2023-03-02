@@ -45,6 +45,8 @@
 typedef struct tgdb_request *tgdb_request_ptr;
 typedef std::list<tgdb_request_ptr> tgdb_request_ptr_list;
 
+pid_t tgdb_debugger_pid = -2;
+
 /**
  * The TGDB context data structure.
  */
@@ -756,12 +758,12 @@ int tgdb_start_gdb(struct tgdb *tgdb,
         int gdb_win_rows, int gdb_win_cols, int *gdb_console_fd,
         int *gdb_mi_fd)
 {
-    tgdb->debugger_pid = invoke_debugger(debugger, argc, argv,
+    tgdb_debugger_pid = invoke_debugger(debugger, argc, argv,
             gdb_win_rows, gdb_win_cols, &tgdb->debugger_stdin,
             &tgdb->debugger_stdout, tgdb->new_ui_pty_pair);
 
     /* Couldn't invoke process */
-    if (tgdb->debugger_pid == -1)
+    if (tgdb_debugger_pid == -1)
         return -1;
 
     *gdb_console_fd = tgdb->debugger_stdout;
@@ -1020,7 +1022,7 @@ static int tgdb_handle_sigchld(struct tgdb *tgdb)
     int waitpid_result;
 
     do {
-        waitpid_result = waitpid(tgdb->debugger_pid, &status, WNOHANG);
+        waitpid_result = waitpid(tgdb_debugger_pid, &status, WNOHANG);
         if (waitpid_result == -1) {
             result = -1;
             clog_error(CLOG_CGDB, "waitpid error %d %s",
@@ -1047,6 +1049,8 @@ static void tgdb_handle_control_c(struct tgdb *tgdb)
         tgdb->command_requests->clear();
 
         tgdb->control_c = 0;
+
+        io_writen(tgdb->debugger_stdin, "interrupt\n", 10);
     }
 }
 
